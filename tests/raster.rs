@@ -1,7 +1,8 @@
 use std::io::Write;
 
 use pixglyph::Glyph;
-use ttf_parser::{Face, GlyphId, Tag};
+use read_fonts::model::Font;
+use read_fonts::types::GlyphId;
 
 const ROBOTO: &[u8] = include_bytes!("../fonts/Roboto-Regular.ttf");
 const SOURCE_SANS: &[u8] = include_bytes!("../fonts/SourceSans3-Regular.otf");
@@ -15,9 +16,9 @@ const NOTO_SERIF_CJK_SUBSET: &[u8] =
 
 #[test]
 fn test_load_all() {
-    let face = Face::parse(SOURCE_SANS, 0).unwrap();
-    for i in 0..face.number_of_glyphs() {
-        Glyph::load(&face, GlyphId(i));
+    let font = Font::new(SOURCE_SANS, 0).unwrap();
+    for i in 0..font.num_glyphs() {
+        Glyph::load(&font, GlyphId::new(i));
     }
 }
 
@@ -34,18 +35,18 @@ fn test_rasterize() {
     ok &= raster_letter(ASANA_MATH_SUBSET, None, 'µ', 0.0, 0.0, 40.0);
     ok &= raster_letter(AOTS, None, '1', 0.0, 0.0, 50.0);
     ok &= raster_letter(NOTO_SERIF_CJK_SUBSET, None, 'J', 0.0, 0.0, 30.0);
-    ok &= raster_letter(ROBOTO_VF, Some((b"wght", 550.0)), 'p', 0.0, 0.0, 60.0);
-    ok &= raster_letter(ROBOTO_VF, Some((b"wdth", 90.0)), 'Ç', 0.0, 0.0, 47.5);
+    ok &= raster_letter(ROBOTO_VF, Some(("wght", 550.0)), 'p', 0.0, 0.0, 60.0);
+    ok &= raster_letter(ROBOTO_VF, Some(("wdth", 90.0)), 'Ç', 0.0, 0.0, 47.5);
     ok &=
-        raster_letter(NOTO_SERIF_CJK_SUBSET, Some((b"wght", 400.0)), 'K', 0.0, 0.0, 50.0);
+        raster_letter(NOTO_SERIF_CJK_SUBSET, Some(("wght", 400.0)), 'K', 0.0, 0.0, 50.0);
     if !ok {
         panic!();
     }
 }
 
 fn raster_letter(
-    font: &[u8],
-    variation: Option<(&[u8; 4], f32)>,
+    data: &'static [u8],
+    variation: Option<(&str, f32)>,
     letter: char,
     x: f32,
     y: f32,
@@ -54,12 +55,12 @@ fn raster_letter(
     let out_path = format!("target/{}.ppm", letter);
     let ref_path = format!("tests/{}.ppm", letter);
 
-    let mut face = Face::parse(font, 0).unwrap();
-    if let Some((axis, value)) = variation {
-        face.set_variation(Tag::from_bytes(axis), value);
+    let mut font = Font::new(data, 0).unwrap();
+    if let Some(variation) = variation {
+        font = font.instance_builder().variations([variation]).build();
     }
-    let id = face.glyph_index(letter).unwrap();
-    let glyph = Glyph::load(&face, id).unwrap();
+    let id = font.charmap().map_unicode(letter).unwrap();
+    let glyph = Glyph::load(&font, id).unwrap();
     let bitmap = glyph.rasterize(x, y, s);
 
     let mut ppm = vec![];
